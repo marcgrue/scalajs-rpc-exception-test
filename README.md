@@ -1,0 +1,1 @@
+# scalajs-rpc-exception-test
