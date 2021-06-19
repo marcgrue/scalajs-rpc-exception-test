@@ -41,10 +41,10 @@ object ajaxWire extends Serializations {
 
         // Check first byte as flag of whether exception has been thrown or not
         if (TypedArrayBuffer.wrap(raw.slice(0, 1)).get(0) == 1) {
-          // Failed future with deserialize exception
+          // Failed future with exception
           Future.failed(Unpickle.apply[Throwable].fromBytes(dataBytes))
         } else {
-          // Successful future with bytes data
+          // Successful future with data
           Future.successful(dataBytes)
         }
 
