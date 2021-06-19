@@ -27,6 +27,9 @@ object AjaxResponder extends App with Serializations {
     path("ajax" / "Api" / Remaining)(respond)
   }
 
+  // Flag for response header to ajaxWire - todo
+  var isException = "no"
+
   val respond: String => Route = (method: String) => post {
     extractRequest { req =>
       req.entity match {
@@ -34,48 +37,63 @@ object AjaxResponder extends App with Serializations {
           val path       = List("Api", method)
           val args       = Unpickle.apply[ByteBuffer].fromBytes(strict.data.asByteBuffer)
           val callResult = router.apply(Request[ByteBuffer](path, args))
-          val futResult  = callResult.toEither match {
+
+          val futResult: Future[Array[Byte]] = callResult.toEither match {
             case Right(byteBufferResultFuture) =>
               byteBufferResultFuture
-                .map { byteBufferResult =>
-                  val dataAsByteArray = Array.ofDim[Byte](byteBufferResult.remaining())
-                  byteBufferResult.get(dataAsByteArray)
-                  dataAsByteArray
+                // Serialize data for successful Future
+                .map { bytes =>
+                  val dataLength                    = bytes.remaining()
+                  val bytesAsByteArray: Array[Byte] = Array.ofDim[Byte](dataLength + 1)
+
+                  // Reserve first byte for exception flag
+                  bytes.get(bytesAsByteArray, 1, dataLength)
+
+                  // Set first byte as a flag (0) for no exception thrown
+                  bytesAsByteArray.update(0, 0)
+                  bytesAsByteArray
                 }
+
+                // Serialize exception for failed Future
                 .recover { case exc: Throwable =>
-                  println("---- Recovering in AjaxResponder ---------------------\n" + exc)
-                  println(exc.getStackTrace.mkString("\n"))
-                  val t: Throwable    = exc
-                  val tb              = Pickle.intoBytes(t)
-                  val dataAsByteArray = Array.ofDim[Byte](tb.remaining())
-                  tb.get(dataAsByteArray)
+                  isException = "yes"
+                  val t: Throwable     = exc
+                  val bytes            = Pickle.intoBytes(t)
+                  val dataLength       = bytes.remaining()
+                  val bytesAsByteArray = Array.ofDim[Byte](dataLength + 1)
 
-                  // Bytes of ArithmeticException("/ by zero") where the first byte (15) is
-                  // the number of the fifteenth exception in Boopickles Composite[Throwable]
-                  // See https://github.com/suzaku-io/boopickle/blob/master/boopickle/shared/src/main/scala/boopickle/CompositePicklers.scala#L110
-                  // 15, 9, 47, 32, 98, 121, 32, 122, 101, 114, 111
-                  //        /       b   y        z    e    r    o
-                  // Why is only this first byte (15) deserialized on the client?
-                  println(dataAsByteArray.mkString(", "))
+                  // Reserve first byte for exception flag
+                  bytes.get(bytesAsByteArray, 1, dataLength)
 
-                  // Why is the Future containing this exception successful?
-                  dataAsByteArray
+                  // Set first byte as a flag (1) for exception thrown
+                  bytesAsByteArray.update(0, 1)
+                  bytesAsByteArray
                 }
 
             case Left(err) => {
               println(s"ServerFailure: " + err)
               err match {
-                case PathNotFound(path: List[String]) =>
-                  Future.failed(new RuntimeException(s"PathNotFound($path)"))
-
-                case HandlerError(exc: Throwable) =>
-                  println(exc.getStackTrace.mkString("\n"))
-                  Future.failed(exc)
-
+                case PathNotFound(path: List[String])  => Future.failed(new RuntimeException(s"PathNotFound($path)"))
+                case HandlerError(exc: Throwable)      => Future.failed(exc)
                 case DeserializerError(exc: Throwable) => Future.failed(exc)
               }
             }
           }
+
+          // todo: send throwable status as response header - this doesn't work for some reason
+          //          respondWithHeader(RawHeader("isException", isException)) {
+          //            complete(futResult)
+          //          }
+          // // or
+          //          onComplete(futResult) {
+          //            case Success(f)   =>
+          //              respondWithHeader(RawHeader("isException", isException)) {
+          ////                complete(Future.successful(f))
+          //                complete(f)
+          //              }
+          //            case Failure(exc) => complete(exc)
+          //          }
+
           complete(futResult)
 
         case _ => complete("Ooops, request entity is not strict!")
