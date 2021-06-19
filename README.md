@@ -1,6 +1,6 @@
 # scalajs-rpc-exception-test
 
-This minimal ScalaJS Akka-Http project is an example of using [Sloth](https://github.com/cornerman/sloth) and [Boopickle](https://boopickle.suzaku.io) for type safe and fast RPC using an Ajax to pull data from server to client both sharing the same API. Sloth allows to use any Functor server return type - here a `Future` is used.
+This minimal ScalaJS Akka-Http project is an example of using [Sloth](https://github.com/cornerman/sloth) and [Boopickle](https://boopickle.suzaku.io) for type safe and fast RPC using Ajax to pull data from server to client both sharing the same API. Sloth allows to use any Functor server return type - here a `Future` is used.
 
 The client initiates the Ajax call by serializing the API method arguments and sending them to the server. The Server then de-serializes the arguments and calls the requested method. The result of this call is serialized and sent back as the Ajax response to the client where it is de-serialized.
 
